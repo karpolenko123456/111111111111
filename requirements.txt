@@ -6,3 +6,4 @@ requests
 mplfinance
 matplotlib
 aiosqlite
+redis
