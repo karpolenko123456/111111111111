@@ -4,3 +4,4 @@ aiogram
 pandas
 requests
 mplfinance
+matplotlib
