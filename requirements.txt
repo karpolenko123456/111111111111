@@ -7,3 +7,5 @@ mplfinance
 matplotlib
 aiosqlite
 redis
+aiocryptopay
+Pillow
