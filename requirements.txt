@@ -9,3 +9,4 @@ aiosqlite
 redis
 aiocryptopay
 Pillow
+apscheduler
