@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import os#!/usr/bin/env python3
 
 import datetime
 import json
@@ -38,7 +38,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 
-storage = RedisStorage.from_url('redis://default:xvUSAwCqAyyCfSpaotrOIpKIPNuRzhGY@redis.railway.internal:6379')
+storage = RedisStorage.from_url(os.environ.get('REDIS_URL'))
 BOT_TOKEN = config.token
 
 
