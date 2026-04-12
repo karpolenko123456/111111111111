@@ -39,7 +39,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 
-storage = RedisStorage.from_url('redis://default:xvUSAwCqAyyCfSpaotrOIpKIPNuRzhGY@redis.railway.internal:6379/0')
+storage = RedisStorage.from_url('redis://default:SNqtFDcehlsTjoEMcPTpgtXVvEfFxThU@redis-69bt.railway.internal:6379/0')
 BOT_TOKEN = config.token
 
 
