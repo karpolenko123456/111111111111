@@ -696,7 +696,7 @@ async def get_check_deposit(call: CallbackQuery, bot: Bot):
 
 
 async def get_binance_klines(symbol, interval, start_time):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&startTime={start_time}"
+    url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&startTime={start_time}"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
