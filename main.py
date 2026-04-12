@@ -810,7 +810,7 @@ async def get_signal(call: CallbackQuery, bot: Bot):
             ohlc_data['close'] = ohlc_data['close'].astype(float)
 
             # Конвертируем метку времени в дату
-            ohlc_data['timestamp'] = pd.to_datetime(ohlc_data['timestamp'], unit='ms')
+            ohlc_data['timestamp'] = pd.to_datetime(ohlc_data['timestamp'].astype(float) / 1000, unit='s')
             ohlc_data.set_index('timestamp', inplace=True)  # Устанавливаем индексом время
 
             # Подготовка данных для графика
