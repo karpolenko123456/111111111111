@@ -740,6 +740,30 @@ async def get_signal(call: CallbackQuery, bot: Bot):
     user_id = call.from_user.id
     lang = call.from_user.language_code
     if lang!='ru' and lang!='en': lang = 'en'
+
+    # Проверка подписки
+    import datetime as dt
+    query = 'SELECT date_end_sub FROM users WHERE user_id = ?'
+    data = await execute_query(query, (user_id,), False, 1)
+    is_admin = await execute_query('SELECT user_id FROM creator WHERE user_id = ?', (user_id,), False, 1)
+    
+    if not is_admin:
+        if not data or not data[0]:
+            if lang == 'ru':
+                await call.answer('❌ У вас нет активной подписки! Приобретите подписку в главном меню.', show_alert=True)
+            else:
+                await call.answer('❌ You have no active subscription! Purchase a subscription in the main menu.', show_alert=True)
+            return
+        
+        date_end_sub = data[0]
+        now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if date_end_sub <= now:
+            if lang == 'ru':
+                await call.answer('❌ Ваша подписка истекла! Продлите подписку в главном меню.', show_alert=True)
+            else:
+                await call.answer('❌ Your subscription has expired! Renew your subscription in the main menu.', show_alert=True)
+            return
+
     if lang=='ru':
         signal_name_up = 'ВВЕРХ'
         signal_name_down = 'ВНИЗ'
