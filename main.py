@@ -700,9 +700,11 @@ async def get_binance_klines(symbol, interval, start_time):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
-                return await response.json()
+                data = await response.json()
+                print(f"Binance status: {response.status}, preview: {str(data)[:200]}")
+                return data
     except Exception as e:
-        print(e)
+        print(f"Binance error: {e}")
 
 
 @router.callback_query(F.data.in_(['signals','get_new_signal']))
