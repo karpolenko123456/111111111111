@@ -696,15 +696,27 @@ async def get_check_deposit(call: CallbackQuery, bot: Bot):
 
 
 async def get_binance_klines(symbol, interval, start_time):
-    url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&startTime={start_time}"
+    # Convert milliseconds to seconds for Bybit
+    start_time_sec = int(start_time) // 1000
+    url = f"https://api.bybit.com/v5/market/kline?category=linear&symbol={symbol}&interval=5&start={start_time_sec * 1000}&limit=200"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 data = await response.json()
-                print(f"Binance status: {response.status}, preview: {str(data)[:200]}")
-                return data
+                print(f"Bybit status: {response.status}, preview: {str(data)[:200]}")
+                if data.get('retCode') == 0:
+                    # Bybit returns [startTime, openPrice, highPrice, lowPrice, closePrice, volume, turnover]
+                    # Binance format: [openTime, open, high, low, close, volume, ...]
+                    result = []
+                    for item in reversed(data['result']['list']):
+                        result.append([item[0], item[1], item[2], item[3], item[4], item[5]])
+                    return result
+                else:
+                    print(f"Bybit error: {data}")
+                    return []
     except Exception as e:
-        print(f"Binance error: {e}")
+        print(f"Bybit API error: {e}")
+        return []
 
 
 @router.callback_query(F.data.in_(['signals','get_new_signal']))
