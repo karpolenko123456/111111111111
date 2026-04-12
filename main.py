@@ -1186,7 +1186,7 @@ async def open_free_bot(call:CallbackQuery,bot:Bot):
 async def start():
     logging.basicConfig(level=logging.INFO)
     bot: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
-    storage = RedisStorage.from_url('redis://195.2.79.111:6379/1')
+    storage = RedisStorage.from_url('redis://default:SNqtFDcehlsTjoEMcPTpgtXVvEfFxThU@redis-69bt.railway.internal:6379/0')
     dp = Dispatcher(storage=storage)
     DB_PATH = 'users.db'
     dp.message.middleware.register(BlacklistMiddleware(DB_PATH))
