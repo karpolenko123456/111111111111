@@ -1,4 +1,4 @@
-token = '6562425766:AAGAtlcdAPZIcX69jg5C3ABG0ysUigDokes'
+token = '7272203935:AAFQH8iuHhFE6_GskYzi5Sd67anxsrQ2W1Y'
 # token = '7308900753:AAGwczi4FvLx2ehysc8xdAEjGzP5FiXm9wA'
 admin_id = 5978617406
 manager_link = f'https://t.me/MasonsFX_bot'
