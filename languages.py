@@ -73,7 +73,7 @@ You’ll trade like a pro trader:
 
 tarifs = {
     'ru':{
-        'free_ref':'Получить бота бесплатно',
+        'free_ref':'Оплата через Администратора',
         'month':'1 месяц 99$',
         'six':'6 месяцев 499$ ',
         'year':'1 год 799$',
