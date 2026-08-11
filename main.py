@@ -4,14 +4,13 @@ import datetime
 import json
 import logging
 import asyncio
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Dict
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, BaseMiddleware, Router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import Message, CallbackQuery, TelegramObject, FSInputFile
+from aiogram.types import Message, CallbackQuery, TelegramObject
 from redis.asyncio import Redis
 
 # Импорт ваших модулей
@@ -79,7 +78,6 @@ class BlacklistMiddleware(BaseMiddleware):
 
 # --- Инициализация БД и миграции ---
 async def init_db():
-    # Создаем таблицу, если её нет
     create_table_query = '''
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -91,12 +89,36 @@ async def init_db():
     '''
     await execute_query(create_table_query, (), True, 0)
 
-    # Если таблица уже существовала без колонки username — добавляем её
     try:
         await execute_query('ALTER TABLE users ADD COLUMN username TEXT', (), True, 0)
     except Exception:
-        # Игнорируем ошибку, если колонка username уже есть
         pass
+
+# --- Вспомогательная функция сборки главной клавиатуры ---
+async def get_main_keyboard():
+    try:
+        settings = await execute_query('SELECT * FROM settings', (), False, 1)
+    except Exception:
+        settings = None
+
+    if settings:
+        return main_keyboard(
+            main_menu.get('signals', '📊 Сигналы') if isinstance(main_menu, dict) else '📊 Сигналы',
+            main_menu.get('profile', '👤 Профиль') if isinstance(main_menu, dict) else '👤 Профиль',
+            settings[1] if len(settings) > 1 else 0,
+            settings[2] if len(settings) > 2 else "🎁 Бесплатно",
+            settings[3] if len(settings) > 3 else 0,
+            settings[4] if len(settings) > 4 else "Отзывы",
+            settings[5] if len(settings) > 5 else "https://t.me",
+            settings[6] if len(settings) > 6 else 0,
+            settings[7] if len(settings) > 7 else "Поддержка",
+            settings[8] if len(settings) > 8 else "https://t.me",
+            settings[9] if len(settings) > 9 else 0
+        )
+    return main_keyboard(
+        '📊 Сигналы', '👤 Профиль', 0, '🎁 Бесплатно',
+        0, 'Отзывы', 'https://t.me', 0, 'Поддержка', 'https://t.me', 0
+    )
 
 # --- Функции логики ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
@@ -132,10 +154,14 @@ async def get_welcome(message: Message, bot: Bot):
         0
     )
     
+    # Формируем стартовую клавиатуру с кнопкой активации
+    btn_text = activate_button if 'activate_button' in globals() else "Активировать"
+    reply_markup = start_key(btn_text)
+
     await bot.send_message(
         user_id, 
         "Добро пожаловать!", 
-        reply_markup=main_keyboard
+        reply_markup=reply_markup
     )
 
 # --- Запуск ---
@@ -148,7 +174,6 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(pay_router)
 
-    # Проверяем и обновляем БД перед запуском бота
     await init_db()
 
     app = web.Application()
