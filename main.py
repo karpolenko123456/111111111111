@@ -38,8 +38,14 @@ redis_host = os.getenv("REDIS_HOST", "redis.railway.internal")
 redis_port = int(os.getenv("REDIS_PORT", 6379))
 redis_password = os.getenv("REDIS_PASSWORD", None)
 
-redis_client = Redis(host=redis_host, port=redis_port, password=redis_password, username="default", db=0)
-storage = RedisStorage(redis=redis_client)
+# Формируем корректный URL для RedisStorage с учетом пароля и схемы
+if redis_password:
+    redis_url = f"redis://default:{redis_password}@{redis_host}:{redis_port}/0"
+else:
+    redis_url = f"redis://{redis_host}:{redis_port}/0"
+
+redis_client = Redis.from_url(redis_url)
+storage = RedisStorage.from_url(redis_url)
 
 BOT_TOKEN = config.token
 WEBHOOK_PATH_CRYPTOBOT = '/369546:AAxPmfahjiLrKIIgDNzwLtkhtlVjtIl1SPi'
