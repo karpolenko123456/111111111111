@@ -142,7 +142,7 @@ async def build_main_keyboard():
     )
 
 async def build_tarifs_keyboard():
-    """Собирает клавиатуру тарифов с учетом параметров в БД"""
+    """Собирает клавиатуру тарифов"""
     settings = await get_settings_data()
 
     free_txt = settings[2] if settings and len(settings) > 2 else "1 день бесплатно"
@@ -247,7 +247,6 @@ async def get_welcome(message: Message, bot: Bot):
             text_msg = lang_data.get('msg', text_msg)
             photo_path = lang_data.get('photo', None)
 
-    # Вызываем start_key передавая аргумент btn_name
     kb = start_key(btn_name)
 
     if photo_path and os.path.exists(photo_path):
@@ -299,6 +298,42 @@ async def process_signals(callback: CallbackQuery):
             if isinstance(lang_data, dict):
                 msg_txt = lang_data.get('msg', msg_txt)
         await callback.message.answer(text=msg_txt, reply_markup=kb)
+
+# Выдача сигнала по выбранной криптовалютной паре
+@router.callback_query(F.data.in_({
+    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'PEPEUSDT', 'WIFUSDT', 'APTUSDT', 
+    'XRPUSDT', 'SHIBUSDT', 'DOGEUSDT', 'BONKUSDT', 'TIAUSDT', 'BNBUSDT', 
+    'SEIUSDT', 'WLDUSDT', 'ORDIUSDT', 'AVAXUSDT', 'NEARUSDT', 'ADAUSDT', 
+    'DOTUSDT', 'UNFIUSDT', 'ATOMUSDT', 'XLMUSDT', 'ZECUSDT', 'LUNCUSDT', 
+    'TONUSDT', 'LINKUSDT', 'LTCUSDT', 'DIAUSDT', 'TRUMPUSDT', 'VETUSDT', 
+    'ALGOUSDT', 'ARBUSDT', 'EOSUSDT'
+}))
+async def process_pair_signal(callback: CallbackQuery):
+    await callback.answer()
+    
+    user_id = callback.from_user.id
+    if not await check_user_sub(user_id):
+        kb = await build_subscr_keyboard()
+        await callback.message.answer("🔒 Для получения сигналов нужна активная подписка.", reply_markup=kb)
+        return
+
+    pair_name = callback.data
+    
+    # Шаблон генерируемого сигнала
+    signal_text = (
+        f"📊 <b>Торговый сигнал: #{pair_name}</b>\n\n"
+        f"<b>Тип сделки:</b> LONG 🟢\n"
+        f"<b>Вход:</b> По рынку (Market)\n"
+        f"<b>Плечо:</b> Cross 10x - 20x\n\n"
+        f"🎯 <b>Цели:</b>\n"
+        f"1. Take-Profit 1 📈\n"
+        f"2. Take-Profit 2 🚀\n"
+        f"3. Take-Profit 3 💎\n\n"
+        f"🛑 <b>Stop-Loss:</b> По рискам (15%)"
+    )
+    
+    kb = back_fter_pay_key()
+    await callback.message.answer(text=signal_text, reply_markup=kb)
 
 # Нажатие кнопки "Подписка" / "Профиль" / "Тарифы"
 @router.callback_query(F.data.in_({'sub', 'subscribe', 'profile', 'tarifs'}))
@@ -353,7 +388,7 @@ async def main():
     port = int(os.getenv("PORT", 3002))
     site = web.TCPSite(runner, '0.0.0.0', port)
 
-    # Очищаем подвисшие обновления и вебхук
+    # Удаление вебхука для предотвращения TelegramConflictError
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
 
