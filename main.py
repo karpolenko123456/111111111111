@@ -34,15 +34,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Redis и Bot
-redis_host = os.getenv("REDIS_HOST", "redis.railway.internal")
-redis_port = int(os.getenv("REDIS_PORT", 6379))
-redis_password = os.getenv("REDIS_PASSWORD", None)
+redis_url = os.getenv("REDIS_URL")
 
-# Формируем корректный URL для RedisStorage с учетом пароля и схемы
-if redis_password:
-    redis_url = f"redis://default:{redis_password}@{redis_host}:{redis_port}/0"
-else:
-    redis_url = f"redis://{redis_host}:{redis_port}/0"
+if not redis_url:
+    redis_host = os.getenv("REDIS_HOST", "redis.railway.internal")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+    redis_password = os.getenv("REDIS_PASSWORD", None)
+
+    if redis_password:
+        redis_url = f"redis://default:{redis_password}@{redis_host}:{redis_port}/0"
+    else:
+        redis_url = f"redis://{redis_host}:{redis_port}/0"
+
+if not redis_url.startswith(("redis://", "rediss://", "unix://")):
+    redis_url = f"redis://{redis_url}"
 
 redis_client = Redis.from_url(redis_url)
 storage = RedisStorage.from_url(redis_url)
@@ -74,7 +79,6 @@ class BlacklistMiddleware(BaseMiddleware):
 
 # --- Функции логики ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
-    # Логика обновления подписки (ваша реализация)
     now = datetime.datetime.now()
     days_to_add = 30 if int(amount) == 99 else (180 if int(amount) == 499 else 365)
     new_end_date = now + datetime.timedelta(days=days_to_add)
@@ -87,7 +91,6 @@ async def update_sub_cryptobot(user_id, amount, bot: Bot):
 async def handle_postback(request):
     body = await request.text()
     data = json.loads(body)
-    # Обработка разных вебхуков (сокращено для примера, логика та же)
     if request.path == WEBHOOK_PATH_CRYPTOBOT:
         invoice = data.get('payload', {})
         user_id = await execute_query('SELECT user_id FROM users WHERE invoice_id = ?', (int(invoice.get('invoice_id')),), False, 1)
@@ -99,7 +102,6 @@ async def handle_postback(request):
 async def get_welcome(message: Message, bot: Bot):
     await set_comands(bot)
     user_id = message.from_user.id
-    # (Ваша полная логика из оригинального файла)
     await bot.send_message(user_id, "Добро пожаловать!")
 
 # --- Запуск ---
