@@ -87,7 +87,7 @@ class BlacklistMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-async def updatge_sub_cryptobot(user_id, amount, bot: Bot):
+async def update_sub_cryptobot(user_id, amount, bot: Bot):
     member = await bot.get_chat_member(int(user_id), int(user_id))
     lang = member.user.language_code
     if lang != 'ru' and lang != 'en':
@@ -130,8 +130,12 @@ async def updatge_sub_cryptobot(user_id, amount, bot: Bot):
     mes_query = 'SELECT mes_pay_id FROM users WHERE user_id = ?'
     params = (user_id,)
     mes_id = await execute_query(mes_query, params, False, 1)
-    mes_id = mes_id[0]
-    await bot.edit_message_reply_markup(chat_id=int(user_id), message_id=int(mes_id), reply_markup=None)
+    
+    if mes_id and mes_id[0]:
+        try:
+            await bot.edit_message_reply_markup(chat_id=int(user_id), message_id=int(mes_id[0]), reply_markup=None)
+        except Exception as e:
+            logging.error(f"Ошибка при сбросе клавиатуры: {e}")
 
     if lang == 'ru':
         msg = (f'✅Счет успешно оплачен.'
@@ -165,12 +169,12 @@ async def handle_postback(request):
             query = 'SELECT user_id FROM users WHERE invoice_id = ?'
             params = (int(invoice_id),)
             user_id = await execute_query(query, params, False, 1)
-            user_id = user_id[0]
-            await updatge_sub_cryptobot(user_id, amount, bot)
+            if user_id and user_id[0]:
+                await update_sub_cryptobot(user_id[0], amount, bot)
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука: {str(e)}")
+            logging.error(f"Ошибка обработки вебхука CryptoBot: {str(e)}")
 
     if request.path == WEBHOOK_CIS_PAY:
         try:
@@ -180,11 +184,11 @@ async def handle_postback(request):
             if status == 'success':
                 amount = data.get('amount')
                 tg_user_id = data.get('custom_fields')
-                await updatge_sub_cryptobot(tg_user_id, amount, bot)
+                await update_sub_cryptobot(tg_user_id, amount, bot)
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука: {str(e)}")
+            logging.error(f"Ошибка обработки вебхука CIS Pay: {str(e)}")
 
     if request.path == WEBHOOK_CRISTAL_PAY:
         try:
@@ -194,11 +198,11 @@ async def handle_postback(request):
             if state == 'payed':
                 amount = data.get('initial_amount')
                 tg_user_id = data.get('extra')
-                await updatge_sub_cryptobot(tg_user_id, amount, bot)
+                await update_sub_cryptobot(tg_user_id, amount, bot)
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука: {str(e)}")
+            logging.error(f"Ошибка обработки вебхука CristalPay: {str(e)}")
 
 
 @router.message(F.text == '/start')
@@ -214,12 +218,12 @@ async def get_welcome(message: Message, bot: Bot):
     query = 'SELECT check_sub FROM creator WHERE user_id = ?'
     params = (config.admin_id,)
     data = await execute_query(query, params, False, 1)
-    is_sub = data[0]
+    is_sub = data[0] if data else 0
 
     query = 'SELECT sub_name FROM users WHERE user_id = ?'
     params = (user_id,)
     data = await execute_query(query, params, False, 1)
-    sub_name = data[0]
+    sub_name = str(data[0]) if data and data[0] is not None else '0'
 
     lang = message.from_user.language_code
     if lang != 'ru' and lang != 'en':
@@ -262,7 +266,7 @@ async def get_welcome(message: Message, bot: Bot):
             query = 'SELECT is_ref FROM users WHERE user_id = ?'
             params = (user_id,)
             data = await execute_query(query, params, False, 1)
-            is_ref = data[0]
+            is_ref = data[0] if data else 0
 
             msg = main_menu.get(f'{lang}').get('msg')
             signals = main_menu.get(f'{lang}').get('signals')
@@ -327,7 +331,7 @@ async def get_welcome(message: Message, bot: Bot):
                 query = 'SELECT is_ref FROM users WHERE user_id = ?'
                 params = (user_id,)
                 data = await execute_query(query, params, False, 1)
-                is_ref = data[0]
+                is_ref = data[0] if data else 0
 
                 msg = main_menu.get(f'{lang}').get('msg')
                 signals = main_menu.get(f'{lang}').get('signals')
@@ -366,7 +370,7 @@ async def check_subscribe(call: CallbackQuery, bot: Bot):
     query = 'SELECT sub_name FROM users WHERE user_id = ?'
     params = (user_id,)
     data = await execute_query(query, params, False, 1)
-    sub_name = int(data[0])
+    sub_name = str(data[0]) if data and data[0] is not None else '0'
 
     lang = call.from_user.language_code
     if lang != 'ru' and lang != 'en':
@@ -374,13 +378,13 @@ async def check_subscribe(call: CallbackQuery, bot: Bot):
 
     if member.status in ['member', 'administrator', 'creator']:
         await bot.delete_message(chat_id=user_id, message_id=call.message.message_id)
-        if sub_name == 0:
+        if sub_name == '0':
             msg = activate_button.get(f'{lang}').get('msg')
             activate = activate_button.get(f'{lang}').get('name')
             photo_name = activate_button.get(f'{lang}').get('photo')
             photo = FSInputFile(path=fr'images/{photo_name}')
             await bot.send_photo(chat_id=user_id, photo=photo, caption=msg, reply_markup=start_key(activate))
-        elif sub_name == 1:
+        elif sub_name == '1':
             user_link = f"<a href='tg://user?id={call.from_user.id}'>{call.from_user.first_name}</a>"
             msg = tarifs.get(f'{lang}').get('msg').format(user_link=user_link)
             free = tarifs.get(f'{lang}').get('free_24')
@@ -410,7 +414,7 @@ async def check_subscribe(call: CallbackQuery, bot: Bot):
             query = 'SELECT is_ref FROM users WHERE user_id = ?'
             params = (user_id,)
             data = await execute_query(query, params, False, 1)
-            is_ref = data[0]
+            is_ref = data[0] if data else 0
 
             msg = main_menu.get(f'{lang}').get('msg')
             signals = main_menu.get(f'{lang}').get('signals')
@@ -497,20 +501,6 @@ async def second_active_message(call: CallbackQuery, bot: Bot):
     ))
 
 
-async def timer_day(bot: Bot, user_id: int, lang: str):
-    await asyncio.sleep(86400)
-    query = 'UPDATE users SET date_start_sub = ?,date_end_sub = ?, sub_name = ? WHERE user_id = ?'
-    params = ('0', '0', 2, user_id)
-    await execute_query(query, params, True, 0)
-
-    if lang == 'ru':
-        msg = '🔔<b>Ваша пробная подписка завершена!</b>\n🔥Вы можете приобрести подписку в главном меню или получить доступ в бота бесплатно.'
-    else:
-        msg = '🔔 </b>Your trial subscription has ended!</b>\n🔥 You can purchase a subscription in the main menu or get free bot access.'
-
-    await bot.send_message(chat_id=user_id, text=msg)
-
-
 @router.callback_query(F.data == 'get_bot_free_day')
 async def open_trial_version(call: CallbackQuery, bot: Bot):
     user_id = call.from_user.id
@@ -521,7 +511,7 @@ async def open_trial_version(call: CallbackQuery, bot: Bot):
     query = 'SELECT is_free_get FROM users WHERE user_id = ?'
     params = (user_id,)
     data = await execute_query(query, params, False, 1)
-    is_free_get = data[0]
+    is_free_get = data[0] if data else 0
 
     if int(is_free_get) == 0:
         if lang == 'ru':
@@ -534,10 +524,9 @@ async def open_trial_version(call: CallbackQuery, bot: Bot):
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
         future_time = (now + datetime.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
 
-        query = 'UPDATE users SET date_start_sub = ?,date_end_sub = ?, sub_name = ?,is_free_get = 1 WHERE user_id = ?'
+        query = 'UPDATE users SET date_start_sub = ?, date_end_sub = ?, sub_name = ?, is_free_get = 1 WHERE user_id = ?'
         params = (current_time, future_time, 'day', user_id)
         await execute_query(query, params, True, 0)
-        asyncio.create_task(timer_day(bot, user_id, lang))
     else:
         if lang == 'ru':
             msg = '⚠️Вы уже активировали пробный период!'
@@ -585,7 +574,7 @@ async def open_subscr_menu(call: CallbackQuery, bot: Bot, state):
     query = 'SELECT date_end_sub FROM users WHERE user_id = ?'
     params = (user_id,)
     data = await execute_query(query, params, False, 1)
-    date_end_sub = data[0]
+    date_end_sub = data[0] if data else '—'
 
     msg = profile.get(f'{lang}').get('msg').format(end_date=f'{date_end_sub}', user_id=user_id)
     month = tarifs.get(f'{lang}').get('month')
@@ -666,9 +655,9 @@ async def check_register(call: CallbackQuery, bot: Bot):
     query = 'SELECT platform_id FROM users WHERE user_id = ?'
     params = (user_id,)
     is_reg = await execute_query(query, params, False, 1)
-    is_reg = is_reg[0]
+    is_reg_val = is_reg[0] if is_reg else 0
 
-    if is_reg != 0:
+    if is_reg_val != 0:
         query = 'UPDATE users SET try_numbers = 0 WHERE user_id = ?'
         params = (user_id,)
         await execute_query(query, params, True, 0)
@@ -684,7 +673,7 @@ async def check_register(call: CallbackQuery, bot: Bot):
     else:
         query = 'SELECT user_id FROM creator'
         data = await execute_query(query, (), False, 2)
-        admin_list = [item for sublist in data for item in sublist]
+        admin_list = [row[0] for row in data] if data else []
 
         query = 'UPDATE users SET try_numbers = try_numbers + 1 WHERE user_id = ?'
         params = (user_id,)
@@ -693,7 +682,7 @@ async def check_register(call: CallbackQuery, bot: Bot):
         query = 'SELECT try_numbers FROM users WHERE user_id = ?'
         params = (user_id,)
         data = await execute_query(query, params, False, 1)
-        try_numbers = data[0]
+        try_numbers = data[0] if data else 1
 
         if try_numbers < 3:
             await call.answer(f'❌Регистрация не найдена❌\nНеудачных попыток {try_numbers}/3', show_alert=True)
