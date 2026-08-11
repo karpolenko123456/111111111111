@@ -82,7 +82,7 @@ class BlacklistMiddleware(BaseMiddleware):
             user_id = event.from_user.id
 
         if user_id and await self.is_user_blacklisted(user_id):
-            return  # Игнорируем событие от пользователя из черного списка
+            return
 
         return await handler(event, data)
 
@@ -530,7 +530,6 @@ async def open_trial_version(call: CallbackQuery, bot: Bot):
             msg = '✅ Success! Your 24-hour access is now active!'
 
         await call.answer(msg, show_alert=True)
-        # open_menu_signals implementation should be called here
         now = datetime.datetime.now()
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
         future_time = (now + datetime.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
@@ -709,3 +708,21 @@ async def check_register(call: CallbackQuery, bot: Bot):
                 params = (user_id,)
                 await execute_query(query, params, commit=True, one=0)
                 await call.answer(f'❌Регистрация не найдена❌\nВы заблокированы', show_alert=True)
+
+
+async def main():
+    dp = Dispatcher(storage=storage)
+    dp.message.middleware(BlacklistMiddleware(db_path='database.db'))
+    dp.callback_query.middleware(BlacklistMiddleware(db_path='database.db'))
+
+    dp.include_router(router)
+    dp.include_router(admin_router)
+    dp.include_router(pay_router)
+
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
