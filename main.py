@@ -97,12 +97,26 @@ async def handle_postback(request):
         if user_id: await update_sub_cryptobot(user_id[0], invoice.get('amount'), bot)
     return web.Response(text="OK", status=200)
 
-# --- Хендлеры (включая /start и остальные) ---
+# --- Хендлеры ---
 @router.message(F.text == '/start')
 async def get_welcome(message: Message, bot: Bot):
     await set_comands(bot)
     user_id = message.from_user.id
-    await bot.send_message(user_id, "Добро пожаловать!")
+    username = message.from_user.username or "NoUsername"
+    
+    # Добавляем пользователя в БД, если его еще нет
+    await execute_query(
+        'INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)',
+        (user_id, username),
+        is_commit=True
+    )
+    
+    # Отправляем сообщение С КЛАВИАТУРОЙ
+    await bot.send_message(
+        user_id, 
+        "Добро пожаловать!", 
+        reply_markup=main_keyboard
+    )
 
 # --- Запуск ---
 async def main():
