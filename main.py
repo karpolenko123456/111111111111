@@ -97,6 +97,7 @@ async def init_db():
 
 # --- Вспомогательные функции ---
 async def build_main_keyboard():
+    """Безопасно собирает main_keyboard, подставляя данные из БД settings"""
     try:
         settings = await execute_query('SELECT * FROM settings', (), False, 1)
     except Exception:
@@ -121,6 +122,7 @@ async def build_main_keyboard():
             signals_txt = lang_data.get('signals', signals_txt)
             profile_txt = lang_data.get('profile', profile_txt)
 
+    # ОБЯЗАТЕЛЬНЫЙ ВЫЗОВ ФУНКЦИИ ()
     return main_keyboard(
         signals_txt,
         profile_txt,
@@ -136,6 +138,7 @@ async def build_main_keyboard():
     )
 
 async def check_user_sub(user_id: int) -> bool:
+    """Проверка наличия активной подписки у пользователя"""
     user = await execute_query('SELECT date_end_sub FROM users WHERE user_id = ?', (user_id,), False, 1)
     if user and user[0]:
         try:
@@ -194,7 +197,8 @@ async def get_welcome(message: Message, bot: Bot):
             text_msg = lang_data.get('msg', text_msg)
             photo_path = lang_data.get('photo', None)
 
-    kb = start_key(btn_name)
+    # Гарантируем вызов клавиатуры как объекта, а не ссылки на функцию
+    kb = start_key(btn_name) if callable(start_key) else start_key
 
     if photo_path and os.path.exists(photo_path):
         await bot.send_photo(
@@ -210,13 +214,13 @@ async def get_welcome(message: Message, bot: Bot):
             reply_markup=kb
         )
 
-# Нажатие на "Активировать"
+# Нажатие кнопки "Активировать"
 @router.callback_query(F.data == 'activate')
 async def process_activate(callback: CallbackQuery):
     await callback.answer()
     kb = await build_main_keyboard()
 
-    msg_text = "Главное меню:"
+    msg_text = "Добро пожаловать в главное меню 🖐"
     if isinstance(main_menu, dict):
         lang_data = main_menu.get('ru', main_menu)
         if isinstance(lang_data, dict):
@@ -227,7 +231,7 @@ async def process_activate(callback: CallbackQuery):
         reply_markup=kb
     )
 
-# Нажатие на "Получить сигнал" / "Сигналы"
+# Нажатие кнопки "Получить сигнал" / "Сигналы"
 @router.callback_query(F.data.in_({'signals', 'get_signal', 'signal'}))
 async def process_signals(callback: CallbackQuery):
     await callback.answer()
@@ -235,12 +239,10 @@ async def process_signals(callback: CallbackQuery):
     has_sub = await check_user_sub(user_id)
 
     if has_sub:
-        # Если есть подписка — показываем тарифы/выбор сигнала
-        kb = tarifs_key()
-        await callback.message.answer("📊 Выберите интересующую пару или режим сигнала:", reply_markup=kb)
+        kb = tarifs_key() if callable(tarifs_key) else tarifs_key
+        await callback.message.answer("📊 Выберите интересующую пару для получения сигнала:", reply_markup=kb)
     else:
-        # Если подписки нет — предлагаем оформить
-        kb = subscr_key()
+        kb = subscr_key() if callable(subscr_key) else subscr_key
         msg_txt = "🔒 У вас нет активной подписки.\n\nОформите подписку, чтобы получить доступ к торговым сигналам!"
         if isinstance(subscribe, dict):
             lang_data = subscribe.get('ru', subscribe)
@@ -248,11 +250,11 @@ async def process_signals(callback: CallbackQuery):
                 msg_txt = lang_data.get('msg', msg_txt)
         await callback.message.answer(text=msg_txt, reply_markup=kb)
 
-# Нажатие на "Подписка" / "Профиль"
+# Нажатие кнопки "Подписка" / "Профиль" / "Тарифы"
 @router.callback_query(F.data.in_({'sub', 'subscribe', 'profile', 'tarifs'}))
 async def process_subscription(callback: CallbackQuery):
     await callback.answer()
-    kb = tarifs_key()
+    kb = tarifs_key() if callable(tarifs_key) else tarifs_key
     
     msg_txt = "💳 Выберите подходящий тариф подписки:"
     if isinstance(tarifs, dict):
@@ -301,6 +303,7 @@ async def main():
     port = int(os.getenv("PORT", 3002))
     site = web.TCPSite(runner, '0.0.0.0', port)
 
+    # Удаляем вебхуки и зависшие запросы, чтобы предотвратить TelegramConflictError
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
 
