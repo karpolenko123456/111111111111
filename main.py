@@ -20,7 +20,7 @@ from creator_menu import router as admin_router
 from keyboards import (
     start_key, deposit_key, main_keyboard, set_comands, subscr_key,
     tarifs_key, method_keys, profile_key, method_keys_menu,
-    next_key, back_fter_pay_key
+    next_key, back_fter_pay_key, signals_key
 )
 from languages import main_menu, activate_button, tarifs, subscribe, profile
 from payments import router as pay_router
@@ -95,13 +95,18 @@ async def init_db():
     except Exception:
         pass
 
-# --- Вспомогательные функции ---
-async def build_main_keyboard():
-    """Безопасно собирает main_keyboard, подставляя данные из БД settings"""
+# --- Вспомогательные функции сборки клавиатур ---
+async def get_settings_data():
+    """Безопасное получение настроек из БД"""
     try:
         settings = await execute_query('SELECT * FROM settings', (), False, 1)
     except Exception:
         settings = None
+    return settings
+
+async def build_main_keyboard():
+    """Собирает главную клавиатуру"""
+    settings = await get_settings_data()
 
     is_free = settings[1] if settings and len(settings) > 1 else 0
     get_free = settings[2] if settings and len(settings) > 2 else "🎁 Бесплатно"
@@ -122,7 +127,6 @@ async def build_main_keyboard():
             signals_txt = lang_data.get('signals', signals_txt)
             profile_txt = lang_data.get('profile', profile_txt)
 
-    # ОБЯЗАТЕЛЬНЫЙ ВЫЗОВ ФУНКЦИИ ()
     return main_keyboard(
         signals_txt,
         profile_txt,
@@ -136,6 +140,52 @@ async def build_main_keyboard():
         url_help,
         is_btn_free
     )
+
+async def build_tarifs_keyboard():
+    """Собирает клавиатуру тарифов с учетом параметров в БД"""
+    settings = await get_settings_data()
+
+    free_txt = settings[2] if settings and len(settings) > 2 else "1 день бесплатно"
+    month_txt = "1 Месяц - 99$"
+    six_txt = "6 Месяцев - 499$"
+    year_txt = "1 Год - 799$"
+    fre_ref = "Бесплатно за друга"
+
+    if isinstance(tarifs, dict):
+        lang_data = tarifs.get('ru', tarifs)
+        if isinstance(lang_data, dict):
+            month_txt = lang_data.get('month', month_txt)
+            six_txt = lang_data.get('six', six_txt)
+            year_txt = lang_data.get('year', year_txt)
+
+    is_reviews = settings[3] if settings and len(settings) > 3 else 0
+    reviews_txt = settings[4] if settings and len(settings) > 4 else "Отзывы"
+    url_reviews = settings[5] if settings and len(settings) > 5 else "https://t.me"
+    is_help = settings[6] if settings and len(settings) > 6 else 0
+    help_txt = settings[7] if settings and len(settings) > 7 else "Поддержка"
+    url_help = settings[8] if settings and len(settings) > 8 else "https://t.me"
+    is_btn_free = settings[9] if settings and len(settings) > 9 else 0
+
+    return tarifs_key(
+        free_txt, month_txt, six_txt, year_txt, fre_ref,
+        is_reviews, reviews_txt, url_reviews,
+        is_help, help_txt, url_help, is_btn_free
+    )
+
+async def build_subscr_keyboard():
+    """Собирает клавиатуру подписки при отсутствии доступа"""
+    url = "https://t.me"
+    btn1 = "Проверить подписку"
+    btn2 = "Канал"
+
+    if isinstance(subscribe, dict):
+        lang_data = subscribe.get('ru', subscribe)
+        if isinstance(lang_data, dict):
+            url = lang_data.get('url', url)
+            btn1 = lang_data.get('btn1', btn1)
+            btn2 = lang_data.get('btn2', btn2)
+
+    return subscr_key(url, btn1, btn2)
 
 async def check_user_sub(user_id: int) -> bool:
     """Проверка наличия активной подписки у пользователя"""
@@ -197,8 +247,8 @@ async def get_welcome(message: Message, bot: Bot):
             text_msg = lang_data.get('msg', text_msg)
             photo_path = lang_data.get('photo', None)
 
-    # Гарантируем вызов клавиатуры как объекта, а не ссылки на функцию
-    kb = start_key(btn_name) if callable(start_key) else start_key
+    # Вызываем start_key передавая аргумент btn_name
+    kb = start_key(btn_name)
 
     if photo_path and os.path.exists(photo_path):
         await bot.send_photo(
@@ -239,10 +289,10 @@ async def process_signals(callback: CallbackQuery):
     has_sub = await check_user_sub(user_id)
 
     if has_sub:
-        kb = tarifs_key() if callable(tarifs_key) else tarifs_key
+        kb = signals_key()
         await callback.message.answer("📊 Выберите интересующую пару для получения сигнала:", reply_markup=kb)
     else:
-        kb = subscr_key() if callable(subscr_key) else subscr_key
+        kb = await build_subscr_keyboard()
         msg_txt = "🔒 У вас нет активной подписки.\n\nОформите подписку, чтобы получить доступ к торговым сигналам!"
         if isinstance(subscribe, dict):
             lang_data = subscribe.get('ru', subscribe)
@@ -254,7 +304,7 @@ async def process_signals(callback: CallbackQuery):
 @router.callback_query(F.data.in_({'sub', 'subscribe', 'profile', 'tarifs'}))
 async def process_subscription(callback: CallbackQuery):
     await callback.answer()
-    kb = tarifs_key() if callable(tarifs_key) else tarifs_key
+    kb = await build_tarifs_keyboard()
     
     msg_txt = "💳 Выберите подходящий тариф подписки:"
     if isinstance(tarifs, dict):
@@ -303,7 +353,7 @@ async def main():
     port = int(os.getenv("PORT", 3002))
     site = web.TCPSite(runner, '0.0.0.0', port)
 
-    # Удаляем вебхуки и зависшие запросы, чтобы предотвратить TelegramConflictError
+    # Очищаем подвисшие обновления и вебхук
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
 
