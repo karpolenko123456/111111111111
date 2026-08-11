@@ -34,6 +34,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import ChatJoinRequest, Message, CallbackQuery, TelegramObject, InputMediaPhoto, FSInputFile
 
+# Импорт для надежного подключения Redis без ошибок парсинга URL со спецсимволами
+from redis.asyncio import Redis
+
 import config
 from db import execute_query
 from creator_menu import router as admin_router, update_subscribe
@@ -46,9 +49,19 @@ from languages import main_menu, activate_button, tarifs, subscribe, profile, si
 from payments import router as pay_router
 
 
-# Подключение Redis
-redis_url = os.getenv("REDIS_URL", "redis://redis.railway.internal:6379/0")
-storage = RedisStorage.from_url(redis_url)
+# Безопасное подключение Redis через отдельные переменные Railway (или значения по умолчанию)
+redis_host = os.getenv("REDIS_HOST", "redis.railway.internal")
+redis_port = int(os.getenv("REDIS_PORT", 6379))
+redis_password = os.getenv("REDIS_PASSWORD", None)
+
+redis_client = Redis(
+    host=redis_host,
+    port=redis_port,
+    password=redis_password,
+    username="default",
+    db=0,
+)
+storage = RedisStorage(redis=redis_client)
 
 BOT_TOKEN = config.token
 
@@ -78,9 +91,9 @@ class BlacklistMiddleware(BaseMiddleware):
         return result is not None
 
     async def __call__(self,
-                       handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
-                       event: TelegramObject,
-                       data: Dict[str, Any]) -> Any:
+                        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+                        event: TelegramObject,
+                        data: Dict[str, Any]) -> Any:
         user_id = None
         if isinstance(event, Message):
             user_id = event.from_user.id
@@ -723,11 +736,11 @@ async def main():
     runner = web.AppRunner(app)
     await runner.setup()
 
-    # Railway выделяет свой порт диначески через os.getenv("PORT")
+    # Railway выделяет свой порт динамически через os.getenv("PORT")
     port = int(os.getenv("PORT", 3002))
     site = web.TCPSite(runner, '0.0.0.0', port)
 
-    # Сброс старых вебхуков от Telegram API перед запускaм Polling
+    # Сброс старых вебхуков от Telegram API перед запуском Polling
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
 
