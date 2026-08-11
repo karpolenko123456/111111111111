@@ -104,14 +104,15 @@ async def get_welcome(message: Message, bot: Bot):
     user_id = message.from_user.id
     username = message.from_user.username or "NoUsername"
     
-    # Добавляем пользователя в БД, если его еще нет
+    # Регистрация пользователя с правильными параметрами вызова
     await execute_query(
         'INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)',
         (user_id, username),
-        is_commit=True
+        True,
+        0
     )
     
-    # Отправляем сообщение С КЛАВИАТУРОЙ
+    # Отправляем сообщение с клавиатурой
     await bot.send_message(
         user_id, 
         "Добро пожаловать!", 
