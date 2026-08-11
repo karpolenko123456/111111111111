@@ -95,6 +95,47 @@ async def init_db():
     except Exception:
         pass
 
+# --- Вспомогательная функция для сборки main_keyboard с 11 параметрами ---
+async def build_main_keyboard():
+    try:
+        settings = await execute_query('SELECT * FROM settings', (), False, 1)
+    except Exception:
+        settings = None
+
+    # Поля из таблицы settings (с дефолтными значениями, если в БД пусто)
+    is_free = settings[1] if settings and len(settings) > 1 else 0
+    get_free = settings[2] if settings and len(settings) > 2 else "🎁 Бесплатно"
+    is_reviews = settings[3] if settings and len(settings) > 3 else 0
+    reviews_txt = settings[4] if settings and len(settings) > 4 else "Отзывы"
+    url_reviews = settings[5] if settings and len(settings) > 5 else "https://t.me"
+    is_help = settings[6] if settings and len(settings) > 6 else 0
+    help_txt = settings[7] if settings and len(settings) > 7 else "Поддержка"
+    url_help = settings[8] if settings and len(settings) > 8 else "https://t.me"
+    is_btn_free = settings[9] if settings and len(settings) > 9 else 0
+
+    signals_txt = "📊 Сигналы"
+    profile_txt = "👤 Профиль"
+
+    if isinstance(main_menu, dict):
+        lang_data = main_menu.get('ru', main_menu)
+        if isinstance(lang_data, dict):
+            signals_txt = lang_data.get('signals', signals_txt)
+            profile_txt = lang_data.get('profile', profile_txt)
+
+    return main_keyboard(
+        signals_txt,
+        profile_txt,
+        is_free,
+        get_free,
+        is_reviews,
+        reviews_txt,
+        url_reviews,
+        is_help,
+        help_txt,
+        url_help,
+        is_btn_free
+    )
+
 # --- Обработка платежей ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
     now = datetime.datetime.now()
@@ -130,7 +171,6 @@ async def get_welcome(message: Message, bot: Bot):
         0
     )
     
-    # Извлечение данных из языковой структуры activate_button
     btn_name = "Активировать"
     text_msg = "Добро пожаловать!"
     photo_path = None
@@ -144,7 +184,6 @@ async def get_welcome(message: Message, bot: Bot):
 
     kb = start_key(btn_name)
 
-    # Отправляем с фото (если файл существует) или обычным сообщением
     if photo_path and os.path.exists(photo_path):
         await bot.send_photo(
             chat_id=user_id,
@@ -158,6 +197,40 @@ async def get_welcome(message: Message, bot: Bot):
             text=text_msg,
             reply_markup=kb
         )
+
+# Хендлер нажатия на кнопку "Активировать"
+@router.callback_query(F.data == 'activate')
+async def process_activate(callback: CallbackQuery):
+    await callback.answer()
+    kb = await build_main_keyboard()
+
+    msg_text = "Главное меню:"
+    if isinstance(main_menu, dict):
+        lang_data = main_menu.get('ru', main_menu)
+        if isinstance(lang_data, dict):
+            msg_text = lang_data.get('msg', msg_text)
+
+    await callback.message.answer(
+        text=msg_text,
+        reply_markup=kb
+    )
+
+# Хендлер возврата в главное меню
+@router.callback_query(F.data == 'back_main')
+async def process_back_main(callback: CallbackQuery):
+    await callback.answer()
+    kb = await build_main_keyboard()
+    
+    msg_text = "Главное меню:"
+    if isinstance(main_menu, dict):
+        lang_data = main_menu.get('ru', main_menu)
+        if isinstance(lang_data, dict):
+            msg_text = lang_data.get('msg', msg_text)
+
+    await callback.message.answer(
+        text=msg_text,
+        reply_markup=kb
+    )
 
 # --- Точка входа ---
 async def main():
