@@ -77,6 +77,27 @@ class BlacklistMiddleware(BaseMiddleware):
             return
         return await handler(event, data)
 
+# --- Инициализация БД и миграции ---
+async def init_db():
+    # Создаем таблицу, если её нет
+    create_table_query = '''
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        date_end_sub TEXT,
+        sub_name TEXT,
+        invoice_id INTEGER
+    )
+    '''
+    await execute_query(create_table_query, (), True, 0)
+
+    # Если таблица уже существовала без колонки username — добавляем её
+    try:
+        await execute_query('ALTER TABLE users ADD COLUMN username TEXT', (), True, 0)
+    except Exception:
+        # Игнорируем ошибку, если колонка username уже есть
+        pass
+
 # --- Функции логики ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
     now = datetime.datetime.now()
@@ -104,7 +125,6 @@ async def get_welcome(message: Message, bot: Bot):
     user_id = message.from_user.id
     username = message.from_user.username or "NoUsername"
     
-    # Регистрация пользователя с правильными параметрами вызова
     await execute_query(
         'INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)',
         (user_id, username),
@@ -112,7 +132,6 @@ async def get_welcome(message: Message, bot: Bot):
         0
     )
     
-    # Отправляем сообщение с клавиатурой
     await bot.send_message(
         user_id, 
         "Добро пожаловать!", 
@@ -128,6 +147,9 @@ async def main():
     dp.include_router(router)
     dp.include_router(admin_router)
     dp.include_router(pay_router)
+
+    # Проверяем и обновляем БД перед запуском бота
+    await init_db()
 
     app = web.Application()
     app.router.add_post(WEBHOOK_PATH_CRYPTOBOT, handle_postback)
