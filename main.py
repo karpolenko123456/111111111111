@@ -10,7 +10,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, F, BaseMiddleware, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.types import Message, CallbackQuery, TelegramObject
+from aiogram.types import Message, CallbackQuery, TelegramObject, FSInputFile
 from redis.asyncio import Redis
 
 # Импорт ваших модулей
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Redis и Bot
+# 2. Настройка Redis
 redis_url = os.getenv("REDIS_URL")
 
 if not redis_url:
@@ -51,6 +51,7 @@ if not redis_url.startswith(("redis://", "rediss://", "unix://")):
 redis_client = Redis.from_url(redis_url)
 storage = RedisStorage.from_url(redis_url)
 
+# 3. Инициализация Бота
 BOT_TOKEN = config.token
 WEBHOOK_PATH_CRYPTOBOT = '/369546:AAxPmfahjiLrKIIgDNzwLtkhtlVjtIl1SPi'
 WEBHOOK_CRISTAL_PAY = '/cristal_pay'
@@ -76,7 +77,7 @@ class BlacklistMiddleware(BaseMiddleware):
             return
         return await handler(event, data)
 
-# --- Инициализация БД и миграции ---
+# --- Инициализация БД ---
 async def init_db():
     create_table_query = '''
     CREATE TABLE IF NOT EXISTS users (
@@ -94,33 +95,7 @@ async def init_db():
     except Exception:
         pass
 
-# --- Вспомогательная функция сборки главной клавиатуры ---
-async def get_main_keyboard():
-    try:
-        settings = await execute_query('SELECT * FROM settings', (), False, 1)
-    except Exception:
-        settings = None
-
-    if settings:
-        return main_keyboard(
-            main_menu.get('signals', '📊 Сигналы') if isinstance(main_menu, dict) else '📊 Сигналы',
-            main_menu.get('profile', '👤 Профиль') if isinstance(main_menu, dict) else '👤 Профиль',
-            settings[1] if len(settings) > 1 else 0,
-            settings[2] if len(settings) > 2 else "🎁 Бесплатно",
-            settings[3] if len(settings) > 3 else 0,
-            settings[4] if len(settings) > 4 else "Отзывы",
-            settings[5] if len(settings) > 5 else "https://t.me",
-            settings[6] if len(settings) > 6 else 0,
-            settings[7] if len(settings) > 7 else "Поддержка",
-            settings[8] if len(settings) > 8 else "https://t.me",
-            settings[9] if len(settings) > 9 else 0
-        )
-    return main_keyboard(
-        '📊 Сигналы', '👤 Профиль', 0, '🎁 Бесплатно',
-        0, 'Отзывы', 'https://t.me', 0, 'Поддержка', 'https://t.me', 0
-    )
-
-# --- Функции логики ---
+# --- Обработка платежей ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
     now = datetime.datetime.now()
     days_to_add = 30 if int(amount) == 99 else (180 if int(amount) == 499 else 365)
@@ -137,7 +112,8 @@ async def handle_postback(request):
     if request.path == WEBHOOK_PATH_CRYPTOBOT:
         invoice = data.get('payload', {})
         user_id = await execute_query('SELECT user_id FROM users WHERE invoice_id = ?', (int(invoice.get('invoice_id')),), False, 1)
-        if user_id: await update_sub_cryptobot(user_id[0], invoice.get('amount'), bot)
+        if user_id: 
+            await update_sub_cryptobot(user_id[0], invoice.get('amount'), bot)
     return web.Response(text="OK", status=200)
 
 # --- Хендлеры ---
@@ -154,17 +130,36 @@ async def get_welcome(message: Message, bot: Bot):
         0
     )
     
-    # Формируем стартовую клавиатуру с кнопкой активации
-    btn_text = activate_button if 'activate_button' in globals() else "Активировать"
-    reply_markup = start_key(btn_text)
+    # Извлечение данных из языковой структуры activate_button
+    btn_name = "Активировать"
+    text_msg = "Добро пожаловать!"
+    photo_path = None
 
-    await bot.send_message(
-        user_id, 
-        "Добро пожаловать!", 
-        reply_markup=reply_markup
-    )
+    if isinstance(activate_button, dict):
+        lang_data = activate_button.get('ru', activate_button)
+        if isinstance(lang_data, dict):
+            btn_name = lang_data.get('name', btn_name)
+            text_msg = lang_data.get('msg', text_msg)
+            photo_path = lang_data.get('photo', None)
 
-# --- Запуск ---
+    kb = start_key(btn_name)
+
+    # Отправляем с фото (если файл существует) или обычным сообщением
+    if photo_path and os.path.exists(photo_path):
+        await bot.send_photo(
+            chat_id=user_id,
+            photo=FSInputFile(photo_path),
+            caption=text_msg,
+            reply_markup=kb
+        )
+    else:
+        await bot.send_message(
+            chat_id=user_id,
+            text=text_msg,
+            reply_markup=kb
+        )
+
+# --- Точка входа ---
 async def main():
     dp = Dispatcher(storage=storage)
     dp.message.middleware(BlacklistMiddleware(db_path='database.db'))
@@ -187,7 +182,7 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', port)
 
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info(f"Веб-сервер на порту {port}. Запуск Polling...")
+    logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
 
     await asyncio.gather(site.start(), dp.start_polling(bot))
 
