@@ -5,7 +5,7 @@ import json
 import time
 import logging
 
-# 1. Включаем логирование СРАЗУ, чтобы не терять ошибки при запуске
+# 1. Включаем логирование СРАЗУ, чтобы Railway не терял выводы при старте
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -46,7 +46,7 @@ from languages import main_menu, activate_button, tarifs, subscribe, profile, si
 from payments import router as pay_router
 
 
-# Динамическое подключение Redis из переменной окружения REDIS_URL
+# Подключение Redis
 redis_url = os.getenv("REDIS_URL", "redis://redis.railway.internal:6379/0")
 storage = RedisStorage.from_url(redis_url)
 
@@ -57,8 +57,6 @@ WEBHOOK_CRISTAL_PAY = '/cristal_pay'
 WEBHOOK_CIS_PAY = '/cis_pay'
 
 bot: Bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
-WEBAPP_HOST = '0.0.0.0'
-WEBAPP_PORT = 3002
 router = Router()
 
 
@@ -716,7 +714,7 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(pay_router)
 
-    # Запуск веб-сервера aiohttp для приема платежных вебхуков
+    # Инициализация веб-сервера для платежей
     app = web.Application()
     app.router.add_post(WEBHOOK_PATH_CRYPTOBOT, handle_postback)
     app.router.add_post(WEBHOOK_CIS_PAY, handle_postback)
@@ -724,15 +722,20 @@ async def main():
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
-    
-    logger.info(f"Запуск Webhook сервера на {WEBAPP_HOST}:{WEBAPP_PORT}")
-    await site.start()
 
-    # Сброс вебхуков бота Telegram и переход на Polling
+    # Railway выделяет свой порт диначески через os.getenv("PORT")
+    port = int(os.getenv("PORT", 3002))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+
+    # Сброс старых вебхуков от Telegram API перед запускaм Polling
     await bot.delete_webhook(drop_pending_updates=True)
-    logger.info("Бот успешно запущен в режиме Polling...")
-    await dp.start_polling(bot)
+    logger.info(f"Веб-сервер запущен на порту {port}. Запуск Polling...")
+
+    # Одновременное удержание веб-сервера и обработчика бота
+    await asyncio.gather(
+        site.start(),
+        dp.start_polling(bot)
+    )
 
 
 if __name__ == "__main__":
