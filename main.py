@@ -4,6 +4,14 @@ import datetime
 import json
 import time
 import logging
+
+# 1. Включаем логирование СРАЗУ, чтобы не терять ошибки при запуске
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 import contextlib
 import asyncio
 import random
@@ -135,7 +143,7 @@ async def update_sub_cryptobot(user_id, amount, bot: Bot):
         try:
             await bot.edit_message_reply_markup(chat_id=int(user_id), message_id=int(mes_id[0]), reply_markup=None)
         except Exception as e:
-            logging.error(f"Ошибка при сбросе клавиатуры: {e}")
+            logger.error(f"Ошибка при сбросе клавиатуры: {e}")
 
     if lang == 'ru':
         msg = (f'✅Счет успешно оплачен.'
@@ -174,7 +182,7 @@ async def handle_postback(request):
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука CryptoBot: {str(e)}")
+            logger.error(f"Ошибка обработки вебхука CryptoBot: {str(e)}")
 
     if request.path == WEBHOOK_CIS_PAY:
         try:
@@ -188,7 +196,7 @@ async def handle_postback(request):
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука CIS Pay: {str(e)}")
+            logger.error(f"Ошибка обработки вебхука CIS Pay: {str(e)}")
 
     if request.path == WEBHOOK_CRISTAL_PAY:
         try:
@@ -202,7 +210,7 @@ async def handle_postback(request):
 
             return web.Response(text="Webhook processed", status=200)
         except Exception as e:
-            logging.error(f"Ошибка обработки вебхука CristalPay: {str(e)}")
+            logger.error(f"Ошибка обработки вебхука CristalPay: {str(e)}")
 
 
 @router.message(F.text == '/start')
@@ -708,10 +716,29 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(pay_router)
 
+    # Запуск веб-сервера aiohttp для приема платежных вебхуков
+    app = web.Application()
+    app.router.add_post(WEBHOOK_PATH_CRYPTOBOT, handle_postback)
+    app.router.add_post(WEBHOOK_CIS_PAY, handle_postback)
+    app.router.add_post(WEBHOOK_CRISTAL_PAY, handle_postback)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
+    
+    logger.info(f"Запуск Webhook сервера на {WEBAPP_HOST}:{WEBAPP_PORT}")
+    await site.start()
+
+    # Сброс вебхуков бота Telegram и переход на Polling
     await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("Бот успешно запущен в режиме Polling...")
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Бот остановлен.")
+    except Exception as e:
+        logger.critical(f"Критическая ошибка при запуске: {e}", exc_info=True)
