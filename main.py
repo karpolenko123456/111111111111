@@ -95,14 +95,13 @@ async def init_db():
     except Exception:
         pass
 
-# --- Вспомогательная функция для сборки main_keyboard с 11 параметрами ---
+# --- Вспомогательные функции ---
 async def build_main_keyboard():
     try:
         settings = await execute_query('SELECT * FROM settings', (), False, 1)
     except Exception:
         settings = None
 
-    # Поля из таблицы settings (с дефолтными значениями, если в БД пусто)
     is_free = settings[1] if settings and len(settings) > 1 else 0
     get_free = settings[2] if settings and len(settings) > 2 else "🎁 Бесплатно"
     is_reviews = settings[3] if settings and len(settings) > 3 else 0
@@ -136,6 +135,17 @@ async def build_main_keyboard():
         is_btn_free
     )
 
+async def check_user_sub(user_id: int) -> bool:
+    user = await execute_query('SELECT date_end_sub FROM users WHERE user_id = ?', (user_id,), False, 1)
+    if user and user[0]:
+        try:
+            end_date = datetime.datetime.strptime(user[0], "%Y-%m-%d %H:%M:%S")
+            if end_date > datetime.datetime.now():
+                return True
+        except Exception:
+            pass
+    return False
+
 # --- Обработка платежей ---
 async def update_sub_cryptobot(user_id, amount, bot: Bot):
     now = datetime.datetime.now()
@@ -158,6 +168,8 @@ async def handle_postback(request):
     return web.Response(text="OK", status=200)
 
 # --- Хендлеры ---
+
+# Команда /start
 @router.message(F.text == '/start')
 async def get_welcome(message: Message, bot: Bot):
     await set_comands(bot)
@@ -198,7 +210,7 @@ async def get_welcome(message: Message, bot: Bot):
             reply_markup=kb
         )
 
-# Хендлер нажатия на кнопку "Активировать"
+# Нажатие на "Активировать"
 @router.callback_query(F.data == 'activate')
 async def process_activate(callback: CallbackQuery):
     await callback.answer()
@@ -215,7 +227,42 @@ async def process_activate(callback: CallbackQuery):
         reply_markup=kb
     )
 
-# Хендлер возврата в главное меню
+# Нажатие на "Получить сигнал" / "Сигналы"
+@router.callback_query(F.data.in_({'signals', 'get_signal', 'signal'}))
+async def process_signals(callback: CallbackQuery):
+    await callback.answer()
+    user_id = callback.from_user.id
+    has_sub = await check_user_sub(user_id)
+
+    if has_sub:
+        # Если есть подписка — показываем тарифы/выбор сигнала
+        kb = tarifs_key()
+        await callback.message.answer("📊 Выберите интересующую пару или режим сигнала:", reply_markup=kb)
+    else:
+        # Если подписки нет — предлагаем оформить
+        kb = subscr_key()
+        msg_txt = "🔒 У вас нет активной подписки.\n\nОформите подписку, чтобы получить доступ к торговым сигналам!"
+        if isinstance(subscribe, dict):
+            lang_data = subscribe.get('ru', subscribe)
+            if isinstance(lang_data, dict):
+                msg_txt = lang_data.get('msg', msg_txt)
+        await callback.message.answer(text=msg_txt, reply_markup=kb)
+
+# Нажатие на "Подписка" / "Профиль"
+@router.callback_query(F.data.in_({'sub', 'subscribe', 'profile', 'tarifs'}))
+async def process_subscription(callback: CallbackQuery):
+    await callback.answer()
+    kb = tarifs_key()
+    
+    msg_txt = "💳 Выберите подходящий тариф подписки:"
+    if isinstance(tarifs, dict):
+        lang_data = tarifs.get('ru', tarifs)
+        if isinstance(lang_data, dict):
+            msg_txt = lang_data.get('msg', msg_txt)
+
+    await callback.message.answer(text=msg_txt, reply_markup=kb)
+
+# Кнопка возврата в главное меню
 @router.callback_query(F.data == 'back_main')
 async def process_back_main(callback: CallbackQuery):
     await callback.answer()
